@@ -11,6 +11,7 @@ library(corrplot)
 library(matrixStats)
 library(naniar)
 library(rlist)
+
 setwd("C:/Users/istas/OneDrive/Documents/Dryas Research/Dryas 2.0")
 
 ################################################################################
@@ -18,24 +19,28 @@ setwd("C:/Users/istas/OneDrive/Documents/Dryas Research/Dryas 2.0")
 ################################################################################
 
 #data
-spec_all = readRDS("Clean-up/Clean_spectra/clean_all.rds")
+spec_all = readRDS("Clean-up/Clean_spectra/clean_all_6scans.rds")
+spec_all = normalize(spec_all)
+spec_all = spec_all[, 750:2400]
+spec_all = spec_all[, -seq(1300, 1460, by = 1)]
+spec_all = spec_all[, -seq(1750, 2030, by = 1)]
+spec_all = spec_all[, -seq(960, 980, by= 1)]
+spec_all = spec_all[, -seq(1170, 1190, by= 1)]
+spec_all = spec_all[, -seq(1235, 1255, by= 1)]
+spec_all = spec_all[, -seq(2040, 2060, by= 1)]
+spec_all = spec_all[, -seq(2135, 2155, by= 1)]
+spec_all = spec_all[, -seq(2153, 2173, by= 1)]
 
 
-#Code for new populations
-s.m = as_spectra(as.matrix(spec_all))
-meta(s.m) = read.csv('metadata_2.csv', stringsAsFactors = F)
-spec_all = s.m
+
+
+
 
 #remove any NaN values - mostly pertains to populations
 spec_all = spec_all[!meta(spec_all)$Location == "NaN",]
 
-spec_all.m = as.matrix(spec_all)
+spec_mat = as.matrix(spec_all)
 spec_all.df = as.data.frame(spec_all)
-
-#Resample by every 10 nm
-spec_small = resample(spec_all, seq(400, 2400, by = 10))
-spec_mat_s = as.matrix(spec_small)
-spec_mat = spec_mat_s
 
 #combine relavant meta data to matrix
 spec_df = as.data.frame(spec_mat)
@@ -48,22 +53,22 @@ colnames(spec_df)[colnames(spec_df) == "spec_all.df$Location"] <- "Location"
 ################################################################################
 
 #Set number of components to be used
-ncomp = 33
+ncomp = 60
 
 #create vectors, lists, and matrices to store metrics and loadings
 accuracy <- c()
 kappa <- c()
-k.fit <- matrix(nrow = ncomp)
+a.fit <- matrix(nrow = ncomp)
 cm.list <- list()
-bg.vip = matrix(nrow=201)
-es.vip = matrix(nrow=201)
-md.vip = matrix(nrow=201)
-tm.vip = matrix(nrow=201)
-wda.vip = matrix(nrow=201)
-wdb.vip = matrix(nrow=201)
+bg.vip = matrix(nrow=1093)
+es.vip = matrix(nrow=1093)
+md.vip = matrix(nrow=1093)
+tm.vip = matrix(nrow=1093)
+wda.vip = matrix(nrow=1093)
+wdb.vip = matrix(nrow=1093)
 
 #start of PLSDA code
-for(i in 1:100){
+for(i in 1:10){
   
   #create data partition: 70% of data for training, 30% for testing
   inTrain <- caret::createDataPartition(
@@ -79,7 +84,7 @@ for(i in 1:100){
   ctrl <- trainControl(
     method = "repeatedcv",
     number = 10,
-    sampling = 'up',
+    sampling = 'down',
     repeats = 3)
   
   #Fit model. Note max iterations set to 10000 to allow model convergence
@@ -112,9 +117,9 @@ for(i in 1:100){
   wdb = assign(paste0('wdb', i), vip$importance$`Wickersham Dome B`)
   wdb.vip <- cbind(wdb.vip, get('wdb'))
   
-  #kappa objects for determining n components
-  k = assign(paste0('k', i), as.matrix(plsFit$results$Kappa))
-  k.fit <- cbind(k.fit, get('k'))
+  #accuracy objects for determining n components
+  a = assign(paste0('a', i), as.matrix(plsFit$results$Accuracy))
+  a.fit <- cbind(a.fit, get('a'))
   
   #test model using the testing data partition (30% of data)
   plsClasses <- predict(plsFit, newdata = testing)
@@ -147,25 +152,26 @@ mean.kap
 sd.kap
 
 ################################################################################
-#Kappa values for choosing the optimal number of components to use
+#accuracy values for choosing the optimal number of components to use
 ################################################################################
 
-k.total = k.fit[,-1]
-kavg = as.matrix(rowMeans(k.total))
-ksd = as.matrix(rowSds(k.total))
+a.total = a.fit[,-1]
+a.avg = as.matrix(rowMeans(a.total))
+a.sd = as.matrix(rowSds(a.total))
 
-klower = kavg - ksd
-khigher = kavg + ksd
+a.lower = a.avg - a.sd
+a.higher = a.avg + a.sd
 
 #Graph to visually choose optimal number of components
 x = 1:60
-par(mfrow = c(1,1), mar = c(5.1, 4.1, 4.1, 2.1), oma = c(5.1, 4.1, 4.1, 2.1))
-plot(x, kavg, type = 'p', pch = 16, cex = .75, ylab = 'Kappa', 
-     xlab = 'Component', xlim = c(1,60), main = 'Kappa for Location')
-arrows(x, klower, x, khigher,length=0.05, angle=90, code=3)
-abline(v = 29, col = 'blue')
-abline(h = max(klower), col = "Red")
-legend('bottomright', legend = c('Mean', 'Maximum kappa','Best component'), 
+par(mar = c(5.1, 4.1, 4.1, 2.1), oma = c(5.1, 4.1, 4.1, 2.1))
+plot(x, a.avg, type = 'p', pch = 16, cex = .75, ylab = 'Accuracy', 
+     xlab = 'Component', xlim = c(1,60), main = 'Accuracy for Species_ID', 
+     ylim = c(0,1))
+arrows(x, a.lower, x, a.higher,length=0.05, angle=90, code=3)
+abline(v = 18, col = 'blue')
+abline(h = max(a.avg), col = "Red")
+legend('bottomright', legend = c('Mean', 'Maximum accuracy','Best component'), 
        pch = c(16, NA, NA), lty = c(NA, 1, 1), col = c('black', 'red', 'blue'))
 
 ################################################################################
@@ -189,7 +195,7 @@ cm.sd = t(cm.sd)
 cm.sd = cm.sd/rowSums(cm.avg)
 rownames(cm.sd) <- c('BG', 'ES', 'MD', 'TM', 'WDA', 'WDB')
 colnames(cm.sd) <- c('BG', 'ES', 'MD', 'TM', 'WDA', 'WDB')
-write.csv(cm.sd, file = 'Figures/cm_final/standard deviations/Location_sd_upsample2_small2.csv')
+write.csv(cm.sd, file = 'Figures/cm_final/6_scans/standard deviations/Location_sd.csv')
 
 #format matrix for plotting
 cm.total = as.data.frame(cm.total)
@@ -199,19 +205,7 @@ rownames(cm.total) <- c('BG', 'ES', 'MD', 'TM', 'WDA', 'WDB')
 colnames(cm.total) <- c('BG', 'ES', 'MD', 'TM', 'WDA', 'WDB')
 
 #save confusion matrix
-write.csv(cm.total, "Figures/cm_final/cm_Location_upsample2_small2.csv")
-
-#species + Location special code
-cm.total = read.csv("Figures/cm_final/cm_Location_upsample2_small2.csv", stringsAsFactors = T)
-cm.total = as.matrix(cm.total)
-rownames(cm.total) <- cm.total[,1]
-cm.total = cm.total[,-1]
-cm.total = mapply(cm.total, FUN = as.numeric)
-cm.total = matrix(data = cm.total, ncol = 12, nrow = 12)
-rownames(cm.total) <- c('ES', 'TM', 'WDB', 'BG', 'ES', 'TM', 
-                        'MD', 'WDA', 'WDB', 'ES', 'TM', 'WDB')
-colnames(cm.total) <- c('ES', 'TM', 'WDB', 'BG', 'ES', 'TM', 
-                        'MD', 'WDA', 'WDB', 'ES', 'TM', 'WDB')
+write.csv(cm.total, "Figures/cm_final/6_scans/Location.csv")
 
 #plot confusion matrix
 cols = colorRampPalette(c('#f5f5f5', '#fe9929'))
@@ -241,7 +235,7 @@ mtext("Prediction", side = 3, cex = 2.5, at = 3.5, line = 2)
 ################################################################################
 vip_to_spec = function(x){
   t.vip = t(x)
-  colnames(t.vip) <- seq(400,2400, by = 10)
+  colnames(t.vip) <- seq(400,2400, by = 1)
   s.vip = as_spectra(t.vip)
 }
 bg.vip = bg.vip[,-1]
